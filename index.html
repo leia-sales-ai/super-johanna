@@ -2169,7 +2169,7 @@ function applyTexts(){
   $('#tLogo').hidden = !logo; if(logo) $('#tLogo').src = logo;
   $('#tTitle').hidden = !!logo;
   const hs = (typeof bestScore === 'function' ? bestScore() : 0) || (parseInt(store.get('rr_highscore') || '0', 10) || 0);
-  $('#tHigh').textContent = (godMode ? '★ Good Mode aktiv · ' : '') + (hs ? 'Bestwert ' + hs : '');
+  $('#tHigh').textContent = (godMode ? '★ Good Mode aktiv · ' : '') + (hs ? 'Bestwert ' + hs + ' · ' : '') + 'Version ' + GAME_VERSION;
   $('#bMute').textContent = muted ? '×' : '♪';
   const L = $('#tLevels'); L.innerHTML = '';
   const u = unlocked();
@@ -2203,12 +2203,13 @@ function setGod(on, silent){
   bn.querySelector('.t').textContent = on ? 'Good Mode' : 'Normal';
   bn.classList.remove('go'); void bn.offsetWidth; bn.classList.add('go');
 }
+const GAME_VERSION = '3';
 let cheatBuf = '';
 window.addEventListener('keydown', e => {
   if(e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
   if(!e.key || e.key.length !== 1) return;
-  cheatBuf = (cheatBuf + e.key.toLowerCase()).slice(-9);
-  if(cheatBuf.endsWith('johanna')){ cheatBuf = ''; setGod(!godMode); }
+  cheatBuf = (cheatBuf + e.key.toLowerCase()).slice(-12);
+  if(cheatBuf.endsWith('johanna') || cheatBuf.endsWith('god')){ cheatBuf = ''; setGod(!godMode); }
 });
 let tapN = 0, tapT = 0;
 function cheatTap(){
@@ -2217,8 +2218,14 @@ function cheatTap(){
   tapT = now; tapN++;
   if(tapN >= 5){ tapN = 0; setGod(!godMode); }
 }
-['#tTitle','#tColl','#tLogo'].forEach(sel => { const el = $(sel); if(el) el.addEventListener('click', cheatTap); });
-$('#hHearts').addEventListener('click', cheatTap);
+['#tTitle','#tColl','#tLogo','#tHigh','#hHearts','#hScore'].forEach(sel => {
+  const el = $(sel); if(!el) return;
+  el.style.pointerEvents = 'auto'; el.style.cursor = 'pointer';
+  el.addEventListener('click', cheatTap);
+  let hold = null;
+  el.addEventListener('pointerdown', () => { hold = setTimeout(() => setGod(!godMode), 1500); });
+  ['pointerup','pointercancel','pointerleave'].forEach(ev => el.addEventListener(ev, () => { clearTimeout(hold); }));
+});
 
 /* ---------- Rangliste ---------- */
 let teamDb = null, teamScores = null, teamFailed = false, rankFrom = 'sTitle', lastRun = null, submitted = false;
