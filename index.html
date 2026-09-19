@@ -42,6 +42,7 @@ body.playing #hud{display:flex}
 #hCrown{color:#f5d27a}
 #hPower{color:var(--champ);font-family:Inter,sans-serif;font-size:12px;font-weight:600}
 #hLevel{font-style:italic;color:var(--champ)}
+#hHearts{pointer-events:auto;cursor:pointer}
 .ic{pointer-events:auto;width:38px;height:38px;border-radius:50%;border:1px solid rgba(232,207,148,.45);background:rgba(20,15,31,.45);color:var(--champ);font-size:14px;display:grid;place-items:center}
 
 /* Touch controls */
@@ -936,6 +937,7 @@ document.addEventListener('contextmenu', e => { if(state !== 'editor') e.prevent
 /* ---------- game state ---------- */
 let state = 'title', camX = 0, animT = 0, attractT = 0;
 let p, G, runStartScore = 0, photogs = [], gifts = [], flashA = 0;
+let godMode = store.get('rr_god') === '1';
 const unlocked = () => Math.max(0, Math.min(2, parseInt(store.get('rr_unlocked') || '0', 10) || 0));
 
 function resetGame(){
@@ -1022,6 +1024,7 @@ function killEnemy(e,spin){
 }
 function hurt(){
   if(p.inv > 0 || p.starT > 0 || p.mode !== 'normal') return;
+  if(godMode){ p.inv = .9; sparkle(p.x+6, p.y+8, 10, ['#f5d27a','#fff','#ff5fa2']); return; }
   if(p.crown){ p.crown = false; p.inv = 1.6; p.vy = -300; p.vx = -p.face*140; sfx.hurt(); sparkle(p.x+6,p.y-2,14,['#f5d27a','#ff5fa2','#fff']); return; }
   p.hearts--; sfx.hurt();
   if(p.hearts <= 0){ die(); return; }
@@ -1031,6 +1034,14 @@ function die(){
   p.hearts = 0; p.mode = 'dying'; p.modeT = 1.6; p.vy = -480; p.vx = 0; sfx.over();
 }
 function respawnFromPit(){
+  if(godMode){
+    const cps0 = LEVELS[levelIdx].cps;
+    let c0 = cps0[0];
+    for(const c of cps0) if(c*TS < p.x) c0 = c;
+    p.x = c0*TS+6; p.y = 9*TS - p.h - 30; p.vx = 0; p.vy = 0; p.inv = 1;
+    sparkle(p.x+6, p.y+10, 12, ['#f5d27a','#fff']);
+    return;
+  }
   p.hearts--; sfx.hurt(); p.crown = false;
   if(p.hearts <= 0){ p.hearts = 0; endGame(false); return; }
   const cps = LEVELS[levelIdx].cps;
@@ -1412,9 +1423,9 @@ function updateHud(){
   if(theme === 'hall'){ const st = hallStatus(p.x + p.w/2); zoneTxt = st.station ? 'Station ' + st.n + '/8 · ' + st.name : st.name; }
   const vals = {
     s: pad6(G.score), b: '◆ ' + G.bags, j: '✦ ' + G.jewels, c: p.crown ? '♛' : '',
-    h: '♥'.repeat(p.hearts) + '♡'.repeat(Math.max(0,3-p.hearts)),
+    h: godMode ? '♥ ∞' : '♥'.repeat(p.hearts) + '♡'.repeat(Math.max(0,3-p.hearts)),
     t: Math.floor(G.time/60) + ':' + String(Math.floor(G.time%60)).padStart(2,'0'),
-    p: [zoneTxt, p.speedT>0 ? 'Energy ' + Math.ceil(p.speedT) + 's' : '', p.starT>0 ? 'Gold Card ' + Math.ceil(p.starT) + 's' : ''].filter(Boolean).join('  ')
+    p: [godMode ? '★ Good Mode' : '', zoneTxt, p.speedT>0 ? 'Energy ' + Math.ceil(p.speedT) + 's' : '', p.starT>0 ? 'Gold Card ' + Math.ceil(p.starT) + 's' : ''].filter(Boolean).join('  ')
   };
   if(vals.s !== lastHud.s) $('#hScore').textContent = vals.s;
   if(vals.b !== lastHud.b) $('#hBags').textContent = vals.b;
@@ -2158,7 +2169,7 @@ function applyTexts(){
   $('#tLogo').hidden = !logo; if(logo) $('#tLogo').src = logo;
   $('#tTitle').hidden = !!logo;
   const hs = (typeof bestScore === 'function' ? bestScore() : 0) || (parseInt(store.get('rr_highscore') || '0', 10) || 0);
-  $('#tHigh').textContent = hs ? 'Bestwert ' + hs : '';
+  $('#tHigh').textContent = (godMode ? '★ Good Mode aktiv · ' : '') + (hs ? 'Bestwert ' + hs : '');
   $('#bMute').textContent = muted ? '×' : '♪';
   const L = $('#tLevels'); L.innerHTML = '';
   const u = unlocked();
@@ -2177,6 +2188,37 @@ $('#bResume').onclick = togglePause;
 $('#bPause').onclick = togglePause;
 $('#bMenu').onclick = toMenu;
 $('#bMenu2').onclick = toMenu;
+
+/* ---------- Cheat: Good Mode ---------- */
+function setGod(on, silent){
+  godMode = on;
+  store.set('rr_god', on ? '1' : '0');
+  applyTexts();
+  if(silent) return;
+  if(on){ sfx.limited(); if(p) sparkle(p.x+6, p.y+8, 24, ['#f5d27a','#fff','#ff5fa2']); }
+  else sfx.bump();
+  if(state === 'play' && popups) popups.push({ x: p.x+6, y: p.y-10, text: on ? 'Good Mode an' : 'Good Mode aus', life: 1.6 });
+  const bn = $('#lvlBanner');
+  bn.querySelector('.n').textContent = on ? 'Cheat aktiviert' : 'Cheat aus';
+  bn.querySelector('.t').textContent = on ? 'Good Mode' : 'Normal';
+  bn.classList.remove('go'); void bn.offsetWidth; bn.classList.add('go');
+}
+let cheatBuf = '';
+window.addEventListener('keydown', e => {
+  if(e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+  if(!e.key || e.key.length !== 1) return;
+  cheatBuf = (cheatBuf + e.key.toLowerCase()).slice(-9);
+  if(cheatBuf.endsWith('johanna')){ cheatBuf = ''; setGod(!godMode); }
+});
+let tapN = 0, tapT = 0;
+function cheatTap(){
+  const now = Date.now();
+  if(now - tapT > 1200) tapN = 0;
+  tapT = now; tapN++;
+  if(tapN >= 5){ tapN = 0; setGod(!godMode); }
+}
+['#tTitle','#tColl','#tLogo'].forEach(sel => { const el = $(sel); if(el) el.addEventListener('click', cheatTap); });
+$('#hHearts').addEventListener('click', cheatTap);
 
 /* ---------- Rangliste ---------- */
 let teamDb = null, teamScores = null, teamFailed = false, rankFrom = 'sTitle', lastRun = null, submitted = false;
